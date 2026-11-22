@@ -17,7 +17,7 @@ def get_conn():
         conn.close()
 
 def init_db():
-    migration = Path(__file__).resolve().parents[1] / "migrations/001_schema.sql"
-    sql = migration.read_text()
+    migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
     with get_conn() as conn:
-        conn.execute(sql)
+        for migration in sorted(migrations_dir.glob("*.sql")):
+            conn.execute(migration.read_text())

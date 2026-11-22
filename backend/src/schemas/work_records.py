@@ -13,3 +13,7 @@ class WorkRecordCreate(BaseModel):
 
 class ReviewRequest(BaseModel):
     note: str = Field(default="", max_length=500)
+
+class CorrectionRequest(BaseModel):
+    validated_hours: Decimal = Field(ge=0, le=12)
+    note: str = Field(default="", max_length=500)

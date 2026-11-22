@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from ..db import get_conn
-from ..schemas.work_records import WorkRecordCreate, ReviewRequest
+from ..schemas.work_records import WorkRecordCreate, ReviewRequest, CorrectionRequest
 from ..services.hour_policy import validate_work_hours
 from ..services.audit import record_audit
+from ..services import adjustments as adj
 from .deps import current_user, require_roles
 
 router = APIRouter(prefix="/work-records", tags=["work-records"])
@@ -75,3 +76,21 @@ def resolve_conflict(record_id: int, payload: ReviewRequest, user=Depends(requir
             review_note=%s, updated_at=now() WHERE id=%s""", (payload.note or "学院管理员复核签到与排班后转教师审批", record_id))
     record_audit(user["id"], "attendance_conflict_resolved", "work_record", record_id, {"note": payload.note})
     return {"id": record_id, "status": "submitted"}
+
+
+@router.post("/{record_id}/correction")
+def correct_record(record_id: int, payload: CorrectionRequest, user=Depends(require_roles("teacher", "college_admin"))):
+    """教师更正已批工时。已交月报留原样，差额补扣进学院后续首个未交月份。"""
+    with get_conn() as conn:
+        row = conn.execute(LIST_SQL + " WHERE w.id=%s", (record_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="工时记录不存在")
+        if user["role"] == "teacher" and row["class_teacher_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="教师只能处理自己课程班的工时")
+        if row["status"] != "approved":
+            raise HTTPException(status_code=409, detail="只有已审批工时可以更正")
+        # 与交账串行化，按实际获得锁的先后决定差额进入哪一期。
+        adj.lock_department(conn, row["department"])
+        result = adj.correct_record(conn, row, payload.validated_hours, payload.note, user["id"])
+    record_audit(user["id"], "work_record_corrected", "work_record", record_id, result)
+    return result

@@ -46,13 +46,14 @@ def pivot_monthly(rows: list[dict], month: str) -> dict:
         if str(row["work_date"])[:7] != month or row["status"] != "approved":
             continue
         key = (row["department"], row["class_code"], row["course_name"], row["activity_type"], row["ta_name"])
-        item = groups.setdefault(key, {"department": key[0], "class_code": key[1], "course_name": key[2], "activity_type": key[3], "ta_name": key[4], "approved_hours": Decimal("0"), "approved_record_count": 0})
+        item = groups.setdefault(key, {"department": key[0], "class_code": key[1], "course_name": key[2], "activity_type": key[3], "ta_name": key[4], "approved_hours": Decimal("0"), "approved_record_count": 0, "adjustment_hours": Decimal("0")})
         item["approved_hours"] += Decimal(str(row["validated_hours"]))
         item["approved_record_count"] += 1
         approved_hours += Decimal(str(row["validated_hours"]))
     values = []
     for item in groups.values():
         item["approved_hours"] = float(item["approved_hours"])
+        item["adjustment_hours"] = 0.0
         values.append(item)
     values.sort(key=lambda x: (x["department"], x["class_code"], x["activity_type"], x["ta_name"]))
     return {"month": month, "rows": values, "total_approved_hours": float(approved_hours), "row_count": len(values)}
